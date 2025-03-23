@@ -27,6 +27,74 @@ class Identity
     private $hash;
     private $hexHash;
     private $appData;
+	
+	public static function validateAnnounce($packet, $onlyValidateSignature = false) {
+		try {
+			if ($packet->packet_type == Packet::ANNOUNCE) {
+				$keysize = Identity::KEYSIZE / 8;
+				$ratchetsize = Identity::RATCHETSIZE / 8;
+				$nameHashLen = Identity::NAME_HASH_LENGTH / 8;
+				$sigLen = Identity::SIGLENGTH / 8;
+				$destinationHash = $packet->destination_hash;
+
+				$publicKey = substr($packet->data, 0, $keysize);
+
+				if ($packet->context_flag) {
+					$nameHash = substr($packet->data, $keysize, $nameHashLen);
+					$randomHash = substr($packet->data, $keysize + $nameHashLen, 10);
+					$ratchet = substr($packet->data, $keysize + $nameHashLen + 10, $ratchetsize);
+					$signature = substr($packet->data, $keysize + $nameHashLen + 10 + $ratchetsize, $sigLen);
+					$appData = "";
+					if (strlen($packet->data) > $keysize + $nameHashLen + 10 + $sigLen + $ratchetsize) {
+						$appData = substr($packet->data, $keysize + $nameHashLen + 10 + $sigLen + $ratchetsize);
+					}
+				} else {
+					$ratchet = "";
+					$nameHash = substr($packet->data, $keysize, $nameHashLen);
+					$randomHash = substr($packet->data, $keysize + $nameHashLen, 10);
+					$signature = substr($packet->data, $keysize + $nameHashLen + 10, $sigLen);
+					$appData = "";
+					if (strlen($packet->data) > $keysize + $nameHashLen + 10 + $sigLen) {
+						$appData = substr($packet->data, $keysize + $nameHashLen + 10 + $sigLen);
+					}
+				}
+
+				$signedData = $destinationHash . $publicKey . $nameHash . $randomHash . $ratchet . $appData;
+
+				$announcedIdentity = new Identity(false);
+				$announcedIdentity->loadPublicKey($publicKey);
+
+				print_r($announcedIdentity);
+				
+				if ($announcedIdentity->pub !== null && $announcedIdentity->validate($signature, $signedData)) {
+					if ($onlyValidateSignature) {
+						unset($announcedIdentity);
+						return true;
+					}
+
+					$hashMaterial = $nameHash . $announcedIdentity->pub; // Assuming this is a method to get a hash
+					$expectedHash = substr(hash("sha256", $hashMaterial), 0, Identity::SIGLENGTH / 8);
+
+					if ($destinationHash == $expectedHash) {
+						// Implement logic as needed, e.g., checking known destinations, logging, etc.
+						return true;
+					} else {
+						RNS::log("Received invalid announce for " . RNS::prettyhexrep($destinationHash) . ": Destination mismatch.", RNS::LOG_DEBUG);
+						return false;
+					}
+				} else {
+					//RNS::log("Received invalid announce for " . RNS::prettyhexrep($destinationHash) . ": Invalid signature.", RNS::LOG_DEBUG);
+					unset($announcedIdentity);
+					return false;
+				}
+			} else {
+				return false;
+			}
+		} catch (Exception $e) {
+			RNS::log("Error occurred while validating announce. The contained exception was: " . $e->getMessage(), RNS::LOG_ERROR);
+			return false;
+		}
+	}
 
     public function __construct($createKeys = true)
     {
@@ -50,7 +118,26 @@ class Identity
         $this->hash = sodium_crypto_generichash($this->getPublicKey());
         $this->hexHash = bin2hex($this->hash);
     }
+	
+	public function loadPublicKey($publicKey) {
+		$keyHalfLength = self::KEYSIZE / 8 / 2;
+        $pubBytes = substr($publicKey, 0, $keyHalfLength);
+        $sigPubBytes = substr($publicKey, $keyHalfLength);
+        $this->pub = $pubBytes;
+        $this->sigPub = $sigPubBytes;
 
+        $this->updateHashes();
+
+        return true;
+	}
+
+	public function fromBytesLittleEndian($s) {
+		// Unpack the string as a little-endian unsigned integer (machine dependent size)
+		$unpacked = unpack('V', $s); // 'V' stands for little-endian unsigned long (always 32-bit, PHP's integer size)
+
+		// Return the first element from the unpacked array
+		return $unpacked[1];
+	}
     public function getPublicKey()
     {
         return $this->pub;
@@ -90,6 +177,9 @@ class Identity
 
     public function validate($signature, $message)
     {
+		echo "signature: $signature \n\r";
+		echo "Message $message \n\r";
+		
         return sodium_crypto_sign_verify_detached($signature, $message, $this->sigPub);
     }
 

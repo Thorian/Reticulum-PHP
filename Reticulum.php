@@ -56,7 +56,7 @@ class Reticulum {
 	public function process_incoming($frame) {
 		$packet = Packet::fromData($frame);
 		if($packet->packet_type == Packet::ANNOUNCE) {
-			echo "ANNOUNCE";
+			Identity::validateAnnounce($packet);
 		} 
 		echo bin2hex($frame)."\n\r";
 		print_r($packet);

@@ -35,15 +35,15 @@ class Packet {
 	protected $flags;
 	protected $hops = 0;
 	protected $header_type;
-	protected $context_flag;
+	public $context_flag;
 	protected $context;
 	protected $transport_type;
 	protected $transport_id;
 	protected $destination_type;
-	protected $destination_hash;
+	public $destination_hash;
 	public $packet_type;
 	protected $packed;
-	protected $data;
+	public $data;
 	
 	public function __construct() {
 		

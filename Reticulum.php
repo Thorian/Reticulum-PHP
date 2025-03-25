@@ -26,6 +26,7 @@ class Reticulum {
 	
 	protected $router;
 	
+	public static $counter = 1;
 	
 	public function connect(string $server='127.0.0.1',int $port=37428) {
 		$this->socket = socket_create(AF_INET,SOCK_STREAM,SOL_TCP);
@@ -54,11 +55,13 @@ class Reticulum {
 	}
 	
 	public function process_incoming($frame) {
+		file_put_contents(self::$counter,$frame);
+		self::$counter++;
+		
 		$packet = Packet::fromData($frame);
 		if($packet->packet_type == Packet::ANNOUNCE) {
 			Identity::validateAnnounce($packet);
 		} 
-		echo bin2hex($frame)."\n\r";
 		print_r($packet);
 	}
 	

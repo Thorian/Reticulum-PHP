@@ -1,6 +1,19 @@
 <?php
 namespace Reticulum;
 
+require_once("libs/Salt-1.0.7/src/Ed25519/Ed25519.php");
+require_once("libs/Salt-1.0.7/src/Ed25519/GePrecomp.php");
+require_once("libs/Salt-1.0.7/src/Ed25519/GeProjective.php");
+require_once("libs/Salt-1.0.7/src/Ed25519/GeExtended.php");
+require_once("libs/Salt-1.0.7/src/Ed25519/GeCompleted.php");
+require_once("libs/Salt-1.0.7/src/Blake2b/Blake2b.php");
+require_once("libs/Salt-1.0.7/src/FieldElement.php");
+
+//require_once("libs/Salt-1.0.7/src/Salt.php");
+require_once("libs/Salt-1.0.7/src/NanoSalt.php");
+use MikeRow\Salt\NanoSalt;
+use MikeRow\Salt\Blake2b\Blake2b;
+
 
 class Identity
 {
@@ -25,7 +38,6 @@ class Identity
     private $sigPrv;
     private $sigPub;
     private $hash;
-    private $hexHash;
     private $appData;
 	
 	public static function validateAnnounce($packet, $onlyValidateSignature = false) {
@@ -36,9 +48,12 @@ class Identity
 				$nameHashLen = Identity::NAME_HASH_LENGTH / 8;
 				$sigLen = Identity::SIGLENGTH / 8;
 				$destinationHash = $packet->destination_hash;
-
+				
+				
+				echo bin2hex($packet->data);
+				
 				$publicKey = substr($packet->data, 0, $keysize);
-
+				
 				if ($packet->context_flag) {
 					$nameHash = substr($packet->data, $keysize, $nameHashLen);
 					$randomHash = substr($packet->data, $keysize + $nameHashLen, 10);
@@ -58,11 +73,15 @@ class Identity
 						$appData = substr($packet->data, $keysize + $nameHashLen + 10 + $sigLen);
 					}
 				}
-
+				
+				
+				$mdata = array("dest"=>bin2hex($destinationHash),"pubkey"=>bin2hex($publicKey),"nameHash"=>bin2hex($nameHash),"random"=>bin2hex($randomHash),"ratchet"=>$ratchet,"data"=>$appData);
+				print_r($mdata);
 				$signedData = $destinationHash . $publicKey . $nameHash . $randomHash . $ratchet . $appData;
-
+				
 				$announcedIdentity = new Identity(false);
 				$announcedIdentity->loadPublicKey($publicKey);
+
 
 				print_r($announcedIdentity);
 				
@@ -115,20 +134,112 @@ class Identity
 
     private function updateHashes()
     {
-        $this->hash = sodium_crypto_generichash($this->getPublicKey());
-        $this->hexHash = bin2hex($this->hash);
+        $this->hash = bin2hex(sodium_crypto_generichash($this->getPublicKey()));
     }
+	
+	public function loadFromFile($file) {
+		$this->loadPrivateKey(file_get_contents($file));
+	}
+	
+		/**
+	 * Generate hash value using Blake2b.
+	 *
+	 * @param  mixed  data to be hashed
+	 * @param  mixed  optional secret key (64 byte max)
+	 * @return FieldElement 64 byte
+	 
+	public static function hash($str, $key = null) {
+		$b2b = new Blake2b();
+
+		$k = $key;
+		if ($key !== null) {
+			$k = self::decodeInput($key);
+			if ($k->count() > $b2b::KEYBYTES) {
+				throw new NanoSaltException('Invalid key size');
+			}
+		}
+
+		$in = array_values(unpack('C*',$str));
+		
+		$ctx = $b2b->init($k);
+		$b2b->update($ctx, $in, count($in));
+
+		$out = $b2b->finishX($ctx);
+		print_r($out);
+		return $out;
+	}
+	
+	public function cryptoWorkaroundPublicFromPrivate($key) {
+
+		$az = self::hash($key);
+		$az[0] &= 248;
+		$az[31] &= 63;
+		$az[31] |= 64;
+
+		$ed = Ed25519::instance();
+		$A = new GeExtended();
+		$pk = new FieldElement(32);
+		$ed->geScalarmultBase($A, $az);
+		$ed->GeExtendedtoBytes($pk, $A);
+
+		return $pk;
+	}*/
+	
+	
+	public function loadPrivateKey($key) {
+
+        try {
+			
+            $halfKeySize = self::KEYSIZE / 8 / 2;
+            $prvBytes = substr($key, 0, $halfKeySize);
+            $this->prv = bin2hex($prvBytes);
+            $sigPrvBytes = substr($key, $halfKeySize);
+            $this->sigPrv = bin2hex($sigPrvBytes);
+			$this->pub = bin2hex(sodium_crypto_box_publickey_from_secretkey(hex2bin($this->prv)));
+           // $this->pubBytes = sodium_crypto_box_publickey_from_secretkey(hex2bin($this->prv));
+			
+			$sigKeys = sodium_crypto_sign_seed_keypair(hex2bin($this->sigPrv));
+			
+			$this->sigPub = bin2hex(sodium_crypto_sign_publickey($sigKeys));
+			
+			//sodium_crypto_sign_publickey_from_secretkey doesnt work to calculate the public key we need to use salt.
+			//why? I don't know but it works.
+			//$nanoSalt = new NanoSalt();
+			//$public_key = $nanoSalt->crypto_sign_public_from_secret_key(hex2bin($this->sigPrv));
+			//echo "len".strlen(hex2bin($public_key->toHex()));
+            //echo "kkk".$public_key->toHex()."KKK";
+		//	echo "len".$this->cryptoWorkaroundPublicFromPrivate($this->sigPrv);
+            
+		//	  $this->sigPub = bin2hex(sodium_crypto_sign_publickey_from_secretkey(hex2bin($this->sigPrv)));
+          //  $this->sigPubBytes = sodium_crypto_sign_publickey(hex2bin($this->sigPrv));
+
+            $this->updateHashes();
+
+            return true;
+        } catch (Exception $e) {
+            error_log("Failed to load identity key: " . $e->getMessage());
+            return false;
+        }
+	}
 	
 	public function loadPublicKey($publicKey) {
 		$keyHalfLength = self::KEYSIZE / 8 / 2;
         $pubBytes = substr($publicKey, 0, $keyHalfLength);
         $sigPubBytes = substr($publicKey, $keyHalfLength);
-        $this->pub = $pubBytes;
-        $this->sigPub = $sigPubBytes;
-
-        $this->updateHashes();
+        $this->pub = bin2hex($pubBytes);
+        $this->sigPub = bin2hex($sigPubBytes);
+		$this->updateHashes();
 
         return true;
+	}
+
+	function from_bytes_little_endian($bytes) {
+		$length = strlen($bytes);
+		$int = 0;
+		for ($i = 0; $i < $length; $i++) {
+			$int += ord($bytes[$i]) << ($i * 8);
+		}
+		return $int;
 	}
 
 	public function fromBytesLittleEndian($s) {
@@ -177,10 +288,10 @@ class Identity
 
     public function validate($signature, $message)
     {
-		echo "signature: $signature \n\r";
-		echo "Message $message \n\r";
+		$ret = sodium_crypto_sign_verify_detached($signature, $message, hex2bin($this->sigPub));
+		if($ret) { echo "success";} else {echo "fail";}
 		
-        return sodium_crypto_sign_verify_detached($signature, $message, $this->sigPub);
+		return $ret;
     }
 
     // Additional methods would need to be implemented here...

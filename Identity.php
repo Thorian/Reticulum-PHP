@@ -1,16 +1,6 @@
 <?php
 namespace Reticulum;
 
-require_once("libs/Salt-1.0.7/src/Ed25519/Ed25519.php");
-require_once("libs/Salt-1.0.7/src/Ed25519/GePrecomp.php");
-require_once("libs/Salt-1.0.7/src/Ed25519/GeProjective.php");
-require_once("libs/Salt-1.0.7/src/Ed25519/GeExtended.php");
-require_once("libs/Salt-1.0.7/src/Ed25519/GeCompleted.php");
-require_once("libs/Salt-1.0.7/src/Blake2b/Blake2b.php");
-require_once("libs/Salt-1.0.7/src/FieldElement.php");
-
-//require_once("libs/Salt-1.0.7/src/Salt.php");
-require_once("libs/Salt-1.0.7/src/NanoSalt.php");
 use MikeRow\Salt\NanoSalt;
 use MikeRow\Salt\Blake2b\Blake2b;
 
@@ -28,7 +18,7 @@ class Identity
     private const SIGLENGTH = 512;
 
     private const NAME_HASH_LENGTH = 80;
-    private const TRUNCATED_HASHLENGTH = 160; // Placeholder for truncated hash length
+    private const TRUNCATED_HASHLENGTH = 128; // Placeholder for truncated hash length
 
     private static $known_destinations = [];
     private static $known_ratchets = [];
@@ -36,8 +26,8 @@ class Identity
     private $prv;
     private $pub;
     private $sigPrv;
-    private $sigPub;
-    private $hash;
+    public $sigPub;
+    public $hash;
     private $appData;
 	
 	public static function validateAnnounce($packet, $onlyValidateSignature = false) {
@@ -73,16 +63,12 @@ class Identity
 						$appData = substr($packet->data, $keysize + $nameHashLen + 10 + $sigLen);
 					}
 				}
-				
-				
-				$mdata = array("dest"=>bin2hex($destinationHash),"pubkey"=>bin2hex($publicKey),"nameHash"=>bin2hex($nameHash),"random"=>bin2hex($randomHash),"ratchet"=>$ratchet,"data"=>$appData);
-				print_r($mdata);
+
 				$signedData = $destinationHash . $publicKey . $nameHash . $randomHash . $ratchet . $appData;
 				
 				$announcedIdentity = new Identity(false);
 				$announcedIdentity->loadPublicKey($publicKey);
-
-
+				
 				print_r($announcedIdentity);
 				
 				if ($announcedIdentity->pub !== null && $announcedIdentity->validate($signature, $signedData)) {
@@ -90,15 +76,20 @@ class Identity
 						unset($announcedIdentity);
 						return true;
 					}
+					
+					$hashMaterial = $nameHash . hex2bin($announcedIdentity->hash); // Assuming this is a method to get a hash
+					$expectedHash = substr(hex2bin(hash("sha256", $hashMaterial)), 0, Identity::TRUNCATED_HASHLENGTH / 8);
 
-					$hashMaterial = $nameHash . $announcedIdentity->pub; // Assuming this is a method to get a hash
-					$expectedHash = substr(hash("sha256", $hashMaterial), 0, Identity::SIGLENGTH / 8);
-
+					echo hash("sha256", $hashMaterial)."
+					";
+					echo bin2hex($destinationHash)."
+					".bin2hex($expectedHash);
 					if ($destinationHash == $expectedHash) {
+						echo ("This worked!!!!!!!!!!!");
 						// Implement logic as needed, e.g., checking known destinations, logging, etc.
 						return true;
 					} else {
-						RNS::log("Received invalid announce for " . RNS::prettyhexrep($destinationHash) . ": Destination mismatch.", RNS::LOG_DEBUG);
+						echo ("Received invalid announce for ".$destinationHash.": Destination mismatch.");
 						return false;
 					}
 				} else {
@@ -141,51 +132,6 @@ class Identity
 		$this->loadPrivateKey(file_get_contents($file));
 	}
 	
-		/**
-	 * Generate hash value using Blake2b.
-	 *
-	 * @param  mixed  data to be hashed
-	 * @param  mixed  optional secret key (64 byte max)
-	 * @return FieldElement 64 byte
-	 
-	public static function hash($str, $key = null) {
-		$b2b = new Blake2b();
-
-		$k = $key;
-		if ($key !== null) {
-			$k = self::decodeInput($key);
-			if ($k->count() > $b2b::KEYBYTES) {
-				throw new NanoSaltException('Invalid key size');
-			}
-		}
-
-		$in = array_values(unpack('C*',$str));
-		
-		$ctx = $b2b->init($k);
-		$b2b->update($ctx, $in, count($in));
-
-		$out = $b2b->finishX($ctx);
-		print_r($out);
-		return $out;
-	}
-	
-	public function cryptoWorkaroundPublicFromPrivate($key) {
-
-		$az = self::hash($key);
-		$az[0] &= 248;
-		$az[31] &= 63;
-		$az[31] |= 64;
-
-		$ed = Ed25519::instance();
-		$A = new GeExtended();
-		$pk = new FieldElement(32);
-		$ed->geScalarmultBase($A, $az);
-		$ed->GeExtendedtoBytes($pk, $A);
-
-		return $pk;
-	}*/
-	
-	
 	public function loadPrivateKey($key) {
 
         try {
@@ -201,17 +147,6 @@ class Identity
 			$sigKeys = sodium_crypto_sign_seed_keypair(hex2bin($this->sigPrv));
 			
 			$this->sigPub = bin2hex(sodium_crypto_sign_publickey($sigKeys));
-			
-			//sodium_crypto_sign_publickey_from_secretkey doesnt work to calculate the public key we need to use salt.
-			//why? I don't know but it works.
-			//$nanoSalt = new NanoSalt();
-			//$public_key = $nanoSalt->crypto_sign_public_from_secret_key(hex2bin($this->sigPrv));
-			//echo "len".strlen(hex2bin($public_key->toHex()));
-            //echo "kkk".$public_key->toHex()."KKK";
-		//	echo "len".$this->cryptoWorkaroundPublicFromPrivate($this->sigPrv);
-            
-		//	  $this->sigPub = bin2hex(sodium_crypto_sign_publickey_from_secretkey(hex2bin($this->sigPrv)));
-          //  $this->sigPubBytes = sodium_crypto_sign_publickey(hex2bin($this->sigPrv));
 
             $this->updateHashes();
 
@@ -289,8 +224,6 @@ class Identity
     public function validate($signature, $message)
     {
 		$ret = sodium_crypto_sign_verify_detached($signature, $message, hex2bin($this->sigPub));
-		if($ret) { echo "success";} else {echo "fail";}
-		
 		return $ret;
     }
 

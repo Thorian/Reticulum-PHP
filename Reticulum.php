@@ -35,18 +35,38 @@ class Reticulum {
 	}
 	
 	public function read() {
+		$flag = hex2bin('7E');
 		$dat=socket_read($this->socket,4096);
 		if(strlen($dat)==0) return; 
 		$this->buffer .= $dat;
 		$flags_remaining = true;
 		while($flags_remaining) {
-			$frame_start = strpos($this->buffer,hex2bin('7E'));
+			$frameStart = strpos($this->buffer,hex2bin('7E'));
+			if ($frameStart !== false) {
+				$frameEnd = strpos($this->buffer, hex2bin('7E'), $frameStart + 1);
+                if ($frameEnd !== false) {
+					$frame = substr($this->buffer, $frameStart + 1, $frameEnd - $frameStart - 1);
+					$frame = str_replace(chr(0x7D) . chr(0x7E ^ 0x20), chr(0x7E), $frame);
+					$frame = str_replace(chr(0x7D) . chr(0x7D ^ 0x20), chr(0x7D), $frame);
+
+					if (strlen($frame) > 15) {
+						$this->process_incoming($frame);
+					}
+					$this->buffer = substr($this->buffer, $frameEnd);
+				}else {
+					$flags_remaining = false;
+				}
+			} else {
+				$flags_remaining = false;
+			}
+			/*
+			
 			if ($frame_start === false) return;
 			$frame_end = strpos($this->buffer,hex2bin('7E'),$frame_start+1);
 			if ($frame_end === false) return;
-			$frame = substr($this->buffer,$frame_start+1, $frame_end - $frame_start-1);
+			$frame = substr($this->buffer,$frame_start+1, $frame_end - $frame_start);
 			$this->process_incoming($frame);
-			$this->buffer = substr($this->buffer,$frame_end+1);
+			$this->buffer = substr($this->buffer,$frame_end+1);*/
 		}
 	}
 	
@@ -57,7 +77,9 @@ class Reticulum {
 	public function process_incoming($frame) {
 		file_put_contents(self::$counter,$frame);
 		self::$counter++;
-		
+	//	$frame = str_replace(chr(0x7D) . chr(0x7E ^ 0x20), chr(0x7E), $frame);
+	//	$frame = str_replace(chr(0x7D) . chr(0x7D ^ 0x20), chr(0x7D), $frame);
+
 		$packet = Packet::fromData($frame);
 		if($packet->packet_type == Packet::ANNOUNCE) {
 			Identity::validateAnnounce($packet);

@@ -76,8 +76,10 @@ class Identity
 					$expectedHash = substr(hex2bin(hash("sha256", $hashMaterial)), 0, Identity::TRUNCATED_HASHLENGTH / 8);
 
 					if ($destinationHash == $expectedHash) {
-						echo ("This worked!!!!!!!!!!!");
-						// Implement logic as needed, e.g., checking known destinations, logging, etc.
+						if($ratchet) {
+							$known_ratchets[bin2hex($destinationHash)] = bin2hex($ratchet);
+						}
+						$known_destinations[bin2hex($destinationHash)]= array(time(),$announcedIdentity,$packet);
 						return true;
 					} else {
 						echo ("Received invalid announce for ".$destinationHash.": Destination mismatch.");

@@ -5,6 +5,7 @@ $ret = new Reticulum\Reticulum();
 
 $id = new Reticulum\Identity(false);
 $id->loadFromFile("identity.theo");
+print_r($id);
 
 $ret->connect();
 

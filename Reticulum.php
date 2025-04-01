@@ -35,6 +35,7 @@ class Reticulum {
 	}
 	
 	public function read() {
+		//find this in TCPInterface.py line 370
 		$flag = hex2bin('7E');
 		$dat=socket_read($this->socket,4096);
 		if(strlen($dat)==0) return; 
@@ -74,9 +75,9 @@ class Reticulum {
 		
 	}
 	
-	public function process_incoming($frame) {
-		file_put_contents(self::$counter,$frame);
-		self::$counter++;
+	public function process_incoming($frame) {//find this in TCPInterface.py Line  292
+	//	file_put_contents(self::$counter,$frame);
+	//	self::$counter++;
 	//	$frame = str_replace(chr(0x7D) . chr(0x7E ^ 0x20), chr(0x7E), $frame);
 	//	$frame = str_replace(chr(0x7D) . chr(0x7D ^ 0x20), chr(0x7D), $frame);
 
@@ -85,6 +86,7 @@ class Reticulum {
 			Identity::validateAnnounce($packet);
 		} 
 		print_r($packet);
+		echo utf8_decode($packet->data);
 	}
 	
 	

@@ -39,9 +39,6 @@ class Identity
 				$sigLen = Identity::SIGLENGTH / 8;
 				$destinationHash = $packet->destination_hash;
 				
-				
-				echo bin2hex($packet->data);
-				
 				$publicKey = substr($packet->data, 0, $keysize);
 				
 				if ($packet->context_flag) {
@@ -69,8 +66,6 @@ class Identity
 				$announcedIdentity = new Identity(false);
 				$announcedIdentity->loadPublicKey($publicKey);
 				
-				print_r($announcedIdentity);
-				
 				if ($announcedIdentity->pub !== null && $announcedIdentity->validate($signature, $signedData)) {
 					if ($onlyValidateSignature) {
 						unset($announcedIdentity);
@@ -80,10 +75,6 @@ class Identity
 					$hashMaterial = $nameHash . hex2bin($announcedIdentity->hash); // Assuming this is a method to get a hash
 					$expectedHash = substr(hex2bin(hash("sha256", $hashMaterial)), 0, Identity::TRUNCATED_HASHLENGTH / 8);
 
-					echo hash("sha256", $hashMaterial)."
-					";
-					echo bin2hex($destinationHash)."
-					".bin2hex($expectedHash);
 					if ($destinationHash == $expectedHash) {
 						echo ("This worked!!!!!!!!!!!");
 						// Implement logic as needed, e.g., checking known destinations, logging, etc.
@@ -125,7 +116,7 @@ class Identity
 
     private function updateHashes()
     {
-        $this->hash = bin2hex(sodium_crypto_generichash($this->getPublicKey()));
+	    $this->hash = bin2hex(substr(hex2bin(hash('sha256',$this->getPublicKey())),0,Identity::TRUNCATED_HASHLENGTH / 8));
     }
 	
 	public function loadFromFile($file) {
@@ -186,7 +177,7 @@ class Identity
 	}
     public function getPublicKey()
     {
-        return $this->pub;
+        return hex2bin($this->pub).hex2bin($this->sigPub);
     }
 
     public function getPrivateKey()

@@ -44,6 +44,8 @@ class Packet {
 	public $packet_type;
 	protected $packed;
 	public $data;
+	public $rssi; //signal strength data dBm
+	public $snr; //signal db
 	
 	public function __construct() {
 		

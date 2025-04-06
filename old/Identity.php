@@ -20,7 +20,7 @@ class Identity
     private static $known_ratchets = [];
 
     private $prv;
-    public  $pub;
+    private $pub;
     private $sigPrv;
     public $sigPub;
     public $hash;
@@ -34,8 +34,10 @@ class Identity
 				$nameHashLen = Identity::NAME_HASH_LENGTH / 8;
 				$sigLen = Identity::SIGLENGTH / 8;
 				$destinationHash = $packet->destination_hash;
-				
+				print_r($packet);
+				echo "dst ".bin2hex($destinationHash)."\n\r";
 				$publicKey = substr($packet->data, 0, $keysize);
+				echo "pub ".bin2hex($publicKey)."\n\r";
 				if ($packet->context_flag) {
 					$nameHash = substr($packet->data, $keysize, $nameHashLen);
 					$randomHash = substr($packet->data, $keysize + $nameHashLen, 10);
@@ -60,8 +62,9 @@ class Identity
 				
 				$announcedIdentity = new Identity(false);
 				$announcedIdentity->loadPublicKey($publicKey);
-				
+				print_r($announcedIdentity);
 				if ($announcedIdentity->pub !== null && $announcedIdentity->validate($signature, $signedData)) {
+					echo "worked";
 					if ($onlyValidateSignature) {
 						unset($announcedIdentity);
 						return true;
